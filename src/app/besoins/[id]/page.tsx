@@ -322,7 +322,9 @@
 
 "use client";
 
+// FORCE LE RENDU DYNAMIQUE (Crucial pour éviter la 404 au build Vercel)
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
@@ -338,6 +340,7 @@ import {
   ArrowLeft,
   Loader2,
   Bug,
+  Globe,
 } from "lucide-react";
 import { CATEGORIES, CategoryId } from "@/data/constants";
 
@@ -368,9 +371,10 @@ export default function RequestDetailPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [hasCommitted, setHasCommitted] = useState(false);
 
-  // --- ÉTAT DE DEBUG BRUTAL ---
+  // --- ÉTAT DE DIAGNOSTIC ---
   const [debugInfo, setDebugInfo] = useState<{
     urlAppelee: string;
+    envBaseUrl: string;
     status: number | string;
     error: string;
   } | null>(null);
@@ -379,30 +383,38 @@ export default function RequestDetailPage() {
     const fetchDetail = async () => {
       if (!id) return;
 
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
+      const baseUrl = (process.env.NEXT_PUBLIC_API_URL || "").replace(
+        /\/$/,
+        "",
+      );
       const finalUrl = `${baseUrl}/requests/find/${id}`;
 
       try {
         setLoading(true);
-        const response = await fetch(finalUrl, { cache: "no-store" });
+        const response = await fetch(finalUrl, {
+          method: "GET",
+          cache: "no-store",
+          headers: { "Cache-Control": "no-cache" },
+        });
 
         if (!response.ok) {
           setDebugInfo({
             urlAppelee: finalUrl,
+            envBaseUrl: process.env.NEXT_PUBLIC_API_URL || "VIDE",
             status: response.status,
-            error: "Le backend a renvoyé une erreur ou l'ID n'existe pas.",
+            error: "Le serveur a répondu, mais la donnée est introuvable.",
           });
-          throw new Error(`HTTP Error: ${response.status}`);
+          return;
         }
 
         const data = await response.json();
         setRequest(data);
       } catch (error: any) {
-        console.error("Erreur détaillée:", error);
         setDebugInfo({
           urlAppelee: finalUrl,
-          status: "CRASH_FETCH",
-          error: error.message || "Erreur de connexion au serveur",
+          envBaseUrl: process.env.NEXT_PUBLIC_API_URL || "VIDE",
+          status: "ÉCHEC RÉSEAU",
+          error: error.message || "Impossible de contacter le backend",
         });
       } finally {
         setLoading(false);
@@ -420,74 +432,80 @@ export default function RequestDetailPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "EN_COURS" }),
       });
-
       if (response.ok) {
         setHasCommitted(true);
         setIsModalOpen(false);
       }
-    } catch (error) {
-      console.error("Erreur API Update:", error);
+    } catch (e) {
+      console.error(e);
     }
   };
 
   // 1. Écran de chargement
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-white">
         <Loader2 className="w-10 h-10 text-emerald-600 animate-spin" />
+        <p className="mt-4 text-gray-400 font-medium">Chargement sécurisé...</p>
       </div>
     );
   }
 
-  // 2. Écran de DEBUG (Si ça ne marche toujours pas sur Vercel)
+  // 2. Écran de DIAGNOSTIC (S'affiche si le fetch échoue au lieu de la 404 noire)
   if (debugInfo && !request) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-900 p-6 text-white font-mono">
-        <div className="max-w-2xl w-full border border-red-500 p-6 rounded-lg bg-slate-800 shadow-2xl">
-          <div className="flex items-center gap-3 text-red-400 mb-6 border-b border-red-900/50 pb-4">
+      <div className="min-h-screen flex items-center justify-center bg-black p-4 font-mono">
+        <div className="max-w-xl w-full border border-red-900 bg-zinc-950 p-8 rounded-xl shadow-2xl">
+          <div className="flex items-center gap-3 text-red-500 mb-6">
             <Bug className="w-8 h-8" />
-            <h1 className="text-xl font-bold uppercase tracking-widest">
-              Diagnostic Brutal
+            <h1 className="text-xl font-bold uppercase tracking-tighter">
+              Diagnostic de Connexion
             </h1>
           </div>
-          <div className="space-y-4 text-sm">
-            <p>
-              <span className="text-emerald-400">ID détecté :</span>{" "}
-              {id || "NON DÉTECTÉ"}
-            </p>
-            <p>
-              <span className="text-emerald-400">URL Backend :</span>{" "}
-              {debugInfo.urlAppelee}
-            </p>
-            <p>
-              <span className="text-emerald-400">Status HTTP :</span>{" "}
-              <span className="bg-red-900 px-2 py-0.5 rounded">
-                {debugInfo.status}
-              </span>
-            </p>
-            <p className="bg-black/50 p-4 rounded text-red-300 border-l-4 border-red-600">
-              <span className="block font-bold mb-1">Erreur :</span>
-              {debugInfo.error}
-            </p>
+
+          <div className="space-y-5 text-sm">
+            <div className="p-3 bg-zinc-900 rounded border border-zinc-800">
+              <p className="text-emerald-500 font-bold mb-1">URL Appélée :</p>
+              <p className="text-zinc-300 break-all">{debugInfo.urlAppelee}</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-3 bg-zinc-900 rounded border border-zinc-800">
+                <p className="text-emerald-500 font-bold mb-1">Status HTTP :</p>
+                <p className="text-white">{debugInfo.status}</p>
+              </div>
+              <div className="p-3 bg-zinc-900 rounded border border-zinc-800">
+                <p className="text-emerald-500 font-bold mb-1">ID Détecté :</p>
+                <p className="text-white">{id || "Aucun"}</p>
+              </div>
+            </div>
+
+            <div className="p-4 bg-red-950/30 rounded border border-red-900/50 text-red-200">
+              <p className="font-bold mb-1 underline">Détail de l'erreur :</p>
+              <p>{debugInfo.error}</p>
+            </div>
           </div>
-          <button
-            onClick={() => window.location.reload()}
-            className="mt-8 w-full py-3 bg-red-600 hover:bg-red-700 font-bold rounded transition-colors"
-          >
-            RECHARGER LA PAGE
-          </button>
-          <Link
-            href="/besoins"
-            className="block text-center mt-4 text-slate-400 underline"
-          >
-            Retourner à l'accueil
-          </Link>
+
+          <div className="mt-8 space-y-3">
+            <button
+              onClick={() => window.location.reload()}
+              className="w-full py-3 bg-white text-black font-bold rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              RÉESSAYER LA CONNEXION
+            </button>
+            <Link
+              href="/besoins"
+              className="block text-center text-zinc-500 text-sm hover:text-white transition-colors"
+            >
+              Retourner à la liste des besoins
+            </Link>
+          </div>
         </div>
       </div>
     );
   }
 
-  // 3. Rendu Normal (Le reste de ton code)
+  // 3. Rendu Normal (Ton interface propre)
   const categoryInfo = CATEGORIES.find((c) => c.id === request?.category);
   const CategoryIcon = categoryInfo?.icon || AlertCircle;
 
@@ -497,39 +515,40 @@ export default function RequestDetailPage() {
         <div className="mb-6 flex items-center gap-2 text-sm text-gray-500">
           <Link
             href="/besoins"
-            className="hover:text-emerald-600 flex items-center gap-1"
+            className="hover:text-emerald-600 flex items-center gap-1 transition-colors"
           >
             <ArrowLeft className="w-4 h-4" /> Retour
           </Link>
           <span>/</span>
-          <span className="truncate font-medium text-gray-700">
+          <span className="truncate max-w-[200px] font-medium text-gray-700">
             {request?.title}
           </span>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Contenu Principal */}
           <div className="lg:col-span-2 space-y-6">
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-              <div className="p-6 border-b border-gray-50">
+              <div className="p-6 border-b border-gray-50 bg-white">
                 <div className="flex flex-wrap gap-3 mb-4">
                   {request?.urgency === "HIGH" && (
-                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700">
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700 animate-pulse">
                       <AlertCircle className="w-3 h-3 mr-1" /> Urgent
                     </span>
                   )}
-                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700">
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 uppercase tracking-wider">
                     <CategoryIcon className="w-3 h-3 mr-1" />{" "}
-                    {categoryInfo?.label}
+                    {categoryInfo?.label || request?.category}
                   </span>
                 </div>
-                <h1 className="text-2xl font-bold text-gray-900">
+                <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
                   {request?.title}
                 </h1>
               </div>
 
               <div className="p-6 md:p-8">
                 <div className="flex items-start gap-4 mb-8 p-4 bg-emerald-50/50 rounded-xl border border-emerald-100">
-                  <User className="w-6 h-6 text-emerald-700" />
+                  <User className="w-6 h-6 text-emerald-700 shrink-0" />
                   <div>
                     <p className="font-semibold text-gray-900">
                       Pour : {request?.patientName}
@@ -554,14 +573,15 @@ export default function RequestDetailPage() {
             </div>
           </div>
 
+          {/* Sidebar */}
           <div className="lg:col-span-1">
             <div className="sticky top-24 space-y-6">
-              <div className="bg-white p-6 rounded-2xl shadow-lg border border-emerald-100">
-                <h3 className="text-sm font-semibold text-gray-400 uppercase mb-3">
+              <div className="bg-white p-6 rounded-2xl shadow-lg border border-emerald-100 ring-1 ring-emerald-500/10">
+                <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4 font-mono">
                   Localisation
                 </h3>
                 <div className="flex items-start gap-3 text-gray-700 mb-6">
-                  <MapPin className="w-5 h-5 text-emerald-600 shrink-0" />
+                  <MapPin className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
                   <div>
                     <p className="font-bold text-gray-900">
                       {request?.hospital || "À domicile"}
@@ -578,11 +598,13 @@ export default function RequestDetailPage() {
                     <div className="flex items-center gap-2 text-emerald-800 font-bold mb-2">
                       <CheckCircle className="w-5 h-5" /> Engagement pris
                     </div>
-                    <div className="bg-white p-3 rounded-lg flex items-center justify-between">
-                      <span className="font-bold">{request?.phone}</span>
+                    <div className="bg-white p-3 rounded-lg border border-emerald-100 flex items-center justify-between shadow-inner">
+                      <span className="font-bold text-lg">
+                        {request?.phone}
+                      </span>
                       <a
                         href={`tel:${request?.phone}`}
-                        className="bg-emerald-600 text-white px-3 py-1 rounded text-sm"
+                        className="bg-emerald-600 text-white px-3 py-1 rounded-md text-sm"
                       >
                         Appeler
                       </a>
@@ -591,33 +613,46 @@ export default function RequestDetailPage() {
                 ) : (
                   <button
                     onClick={() => setIsModalOpen(true)}
-                    className="w-full py-4 bg-emerald-600 text-white font-bold rounded-xl shadow-lg"
+                    className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-lg transition-all transform hover:-translate-y-1"
                   >
                     Je peux aider
                   </button>
                 )}
+              </div>
+
+              <div className="bg-orange-50 p-4 rounded-xl border border-orange-100 flex gap-3">
+                <ShieldAlert className="w-6 h-6 text-orange-500 shrink-0" />
+                <div className="text-right" dir="rtl">
+                  <h4 className="font-bold text-orange-800 text-sm mb-1">
+                    تنبيه هام
+                  </h4>
+                  <p className="text-[11px] text-orange-700">
+                    يرجى الجدية التامة عند تأكيد المساعدة.
+                  </p>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
 
+      {/* MODALE */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl">
-            <h2 className="text-xl font-bold text-gray-900 mb-4 text-center">
+            <h2 className="text-xl font-bold text-gray-900 mb-6 text-center">
               Confirmation d'engagement
             </h2>
             <div className="flex gap-3">
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="flex-1 py-3 text-gray-500 font-medium"
+                className="flex-1 py-3 text-gray-500 font-medium hover:bg-gray-100 rounded-xl"
               >
                 Annuler
               </button>
               <button
                 onClick={handleCommitment}
-                className="flex-1 py-3 bg-emerald-600 text-white font-bold rounded-xl shadow-lg"
+                className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-lg"
               >
                 Je confirme
               </button>
