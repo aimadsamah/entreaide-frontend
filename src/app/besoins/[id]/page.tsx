@@ -1,4 +1,5 @@
 "use client";
+export const dynamic = "force-dynamic"; // je l'ai ajouter pour regler le probleme de la page qui ne saffiche pas
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
