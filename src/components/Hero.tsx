@@ -41,7 +41,7 @@ const Hero = () => {
         <div className="mt-12 flex flex-col sm:flex-row justify-center items-center gap-5">
           {/* Bouton Primaire : Pour les donateurs (couleur chaude/positive comme le vert émeraude) */}
           <Link
-            href="/faire-un-don"
+            href="/besoins"
             className="group relative inline-flex items-center justify-center w-full sm:w-auto px-8 py-4 text-base font-bold text-white rounded-full bg-emerald-600 overflow-hidden shadow-lg transition-all duration-300 hover:bg-emerald-700 hover:shadow-emerald-500/30 hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 focus:ring-offset-gray-900"
           >
             {/* L'effet de brillance (shine) */}
